@@ -2,8 +2,12 @@
 #include <dht11.h>
 #include <Servo.h>
 #include <FastLED.h>
-#define ValvePin 4
-#define DHT11PIN 4
+#include <ESP8266WiFi.h>
+#include <ESP8266WiFiMulti.h>
+#include <ESP8266HTTPClient.h>
+#define ValvePin 4 //d2
+#define DHT11PIN 5 //d1
+#define WPin     0 //a0
 
 #define LED_TYPE         WS2812     // Модель ленты
 #define COLOR_ORDER      GRB        // Цветовая модель
@@ -11,36 +15,94 @@
 #define NUM_LEDS         12         // Кол-во светодиодов в ленте
 #define COLOR_CORRECTION 0xFFB0F0   // Цветокоррекция
 #define BRIGHTNESS       100        // Яркость ленты
+#ifndef STASSID
+#define STASSID "Redmi Note 3"
+#define STAPSK  "vadimpopov3"
+#endif
+
+const char* ssid     = STASSID;
+const char* password = STAPSK;
+
 CRGB leds[NUM_LEDS];
-
-
-
 dht11 DHT;
 Servo valveservo;
-int input;
+long WatSoil,TAir,HumAir,LastWat,rt;
 float t;
 void setup()
 {
-  Serial.begin(9600);
+  Serial.begin(115200);
   valveservo.attach(ValvePin);
   FastLED.addLeds<LED_TYPE, PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(COLOR_CORRECTION);
   FastLED.setBrightness(BRIGHTNESS);
+  conn();
+  for(int i=0;i<10;i++){
+  if(rt==0){
+  rt = getservertime();
+  }
+  }
+}
+void loop()
+{
+  rt++;
+  fill();
+  FastLED.show();
+  DHT.read(DHT11PIN);
+  HumAir = DHT.humidity;
+  TAir = DHT.temperature;
+  WatSoil = analogRead(WPin);
+  if(WatSoil<550){
+    valveservo.write(90);
+    LastWat=rt;
+  }else
+  {valveservo.write(0);
+   
+    };
+  Serial.println(rt);
+  Serial.println(TAir);
+  Serial.println(HumAir);  
+  Serial.println(WatSoil);    
+  Serial.println(LastWat);    
+  sendtoserver();  
+  delay(1000);
 }
 
 
-//void fill(){
-//  uint8_t thishue = millis() * (255 - 200)/255;
-//  CHSV hsv;
-//  hsv.hue = thishue;
-//  hsv.val = 255;
-//  hsv.sat = 240;
-//  for(int i = 0; i < NUM_LEDS;i++){
-//    leds[i] = hsv;
-//    hsv.hue += 15;
-//  }
-//}
+
+void sendtoserver(){
+  WiFiClient client;
+  HTTPClient http;
+      Serial.print("[HTTP] begin...\n");
+      //Id=1&Ha=2&Ta=3&Hs=4&Li=5&Wt=6
+      String HR = "http://192.168.43.11/hsite/datafrom.php?";
+      HR+="Id="+1;
+      HR+="&Ha="+HumAir;
+      HR+="&Ta="+TAir;
+      HR+="&Hs="+WatSoil;
+      HR+="&Li="+rt;
+      HR+="&Wt="+LastWat;
+      Serial.println(HR);  
+    if (http.begin(client, "http://192.168.43.11/HSite/time.php")) {  // HTTP
+      Serial.print("[HTTP] GET...\n");
+      int httpCode = http.GET();
+      if (httpCode > 0) {
+        if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
+          String payload = http.getString();
+          Serial.println(payload);
+        }
+      }
+      http.end();
+    } else {
+      Serial.printf("[HTTP} Unable to connect\n");
+    }
+
+
+  
+}
+
 void fill() {
+  t = rt/86400*3.14;
   for (int i = 0; i < NUM_LEDS; i++) {
+    FastLED.setBrightness(sin8(t));
     float r = sin(t + i * 0.03 + 1) + 1;
     float g = sin(t + i * 0.03 + 2) + 1;
     float b = sin(t + i * 0.03 + 3) + 1;
@@ -48,30 +110,43 @@ void fill() {
   }
 }
 
-
-void loop()
-{
-  t += 0.005;
-
+void conn() {
+    Serial.println();
   Serial.println();
-  //FastLED.clear();
-  fill();
-  FastLED.show();
-  //      if(Serial.available() > 0)
-  //    {
-  //        input = Serial.parseInt();
-  //    }
-  //  if(input>180){input=180;}
-  //   if(input<0){input=0;}
-  //   valveservo.write(input);
-  Serial.println(t);
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
 
-  //Serial.print("Humidity (%): ");
-  //Serial.println((float)DHT.humidity, 2);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
 
-  //Serial.print("Temperature (C): ");
-  //Serial.println((float)DHT.temperature, 2);
-
-  delay(20);
-
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
 }
+long getservertime(){
+  WiFiClient client;
+  HTTPClient http;
+      Serial.print("[HTTP] begin...\n");
+    if (http.begin(client, "http://192.168.43.11/HSite/time.php")) {  // HTTP
+      Serial.print("[HTTP] GET...\n");
+      int httpCode = http.GET();
+      if (httpCode > 0) {
+        if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
+          String payload = http.getString();
+          Serial.println(payload);
+          return payload.toFloat();
+        }
+      }
+      return http.getString().toFloat();
+      http.end();
+    } else {
+      Serial.printf("[HTTP} Unable to connect\n");
+      return 0;
+    }
+}
+
