@@ -26,7 +26,7 @@ const char* password = STAPSK;
 CRGB leds[NUM_LEDS];
 dht11 DHT;
 Servo valveservo;
-long WatSoil,TAir,HumAir,LastWat,rt;
+long WatSoil, TAir, HumAir, LastWat, rt;
 float t;
 void setup()
 {
@@ -35,72 +35,72 @@ void setup()
   FastLED.addLeds<LED_TYPE, PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(COLOR_CORRECTION);
   FastLED.setBrightness(BRIGHTNESS);
   conn();
-  for(int i=0;i<10;i++){
-  if(rt==0){
-  rt = getservertime();
-  }
+  for (int i = 0; i < 10; i++) {
+    if (rt == 0) {
+      rt = getservertime();
+    }
   }
 }
 void loop()
 {
-  rt++;
+  rt += 5;
   fill();
   FastLED.show();
   DHT.read(DHT11PIN);
   HumAir = DHT.humidity;
   TAir = DHT.temperature;
   WatSoil = analogRead(WPin);
-  if(WatSoil<550){
-    valveservo.write(90);
-    LastWat=rt;
-  }else
-  {valveservo.write(0);
-   
-    };
+  if (WatSoil < 200) {
+    valveservo.write(180);
+    LastWat = rt;
+  } else
+  { valveservo.write(90);
+
+  };
   Serial.println(rt);
   Serial.println(TAir);
-  Serial.println(HumAir);  
-  Serial.println(WatSoil);    
-  Serial.println(LastWat);    
-  sendtoserver();  
-  delay(1000);
+  Serial.println(HumAir);
+  Serial.println(WatSoil);
+  Serial.println(LastWat);
+  while (!sendtoserver()) {
+    Serial.println("Try to send");
+  }
+  delay(5000);
 }
 
 
 
-void sendtoserver(){
+bool sendtoserver() {
   WiFiClient client;
   HTTPClient http;
-      Serial.print("[HTTP] begin...\n");
-      //Id=1&Ha=2&Ta=3&Hs=4&Li=5&Wt=6
-      String HR = "http://192.168.43.11/hsite/datafrom.php?";
-      HR+="Id="+1;
-      HR+="&Ha="+HumAir;
-      HR+="&Ta="+TAir;
-      HR+="&Hs="+WatSoil;
-      HR+="&Li="+rt;
-      HR+="&Wt="+LastWat;
-      Serial.println(HR);  
-    if (http.begin(client, "http://192.168.43.11/HSite/time.php")) {  // HTTP
-      Serial.print("[HTTP] GET...\n");
-      int httpCode = http.GET();
-      if (httpCode > 0) {
-        if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
-          String payload = http.getString();
-          Serial.println(payload);
-        }
-      }
+  Serial.print("[HTTP] begin...\n");
+  //Id=1&Ha=2&Ta=3&Hs=4&Li=5&Wt=6
+  String HR = "http://192.168.43.11/hsite/datafrom.php?";
+  HR += "Id=1";
+  HR += "&Ha=" + String(HumAir);
+  HR += "&Ta=" + String(TAir);
+  HR += "&Hs=" + String(WatSoil);
+  HR += "&Li=" + String(rt);
+  HR += "&Wt=" + String(LastWat);
+  Serial.println(HR);
+  if (http.begin(client, HR)) {  // HTTP
+    Serial.print("[HTTP] GET...\n");
+    int httpCode = http.GET();
+    if (httpCode > 0) {
+      String payload = http.getString();
+      Serial.println(payload);
       http.end();
-    } else {
-      Serial.printf("[HTTP} Unable to connect\n");
+      return true;
     }
-
-
-  
+  } else {
+    http.end();
+    Serial.printf("[HTTP} Unable to connect\n");
+    return false;
+  }
 }
 
 void fill() {
-  t = rt/86400*3.14;
+  t = rt / 86400 * 3.14;
   for (int i = 0; i < NUM_LEDS; i++) {
     FastLED.setBrightness(sin8(t));
     float r = sin(t + i * 0.03 + 1) + 1;
@@ -111,7 +111,7 @@ void fill() {
 }
 
 void conn() {
-    Serial.println();
+  Serial.println();
   Serial.println();
   Serial.print("Connecting to ");
   Serial.println(ssid);
@@ -128,25 +128,25 @@ void conn() {
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
 }
-long getservertime(){
+long getservertime() {
   WiFiClient client;
   HTTPClient http;
-      Serial.print("[HTTP] begin...\n");
-    if (http.begin(client, "http://192.168.43.11/HSite/time.php")) {  // HTTP
-      Serial.print("[HTTP] GET...\n");
-      int httpCode = http.GET();
-      if (httpCode > 0) {
-        if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
-          String payload = http.getString();
-          Serial.println(payload);
-          return payload.toFloat();
-        }
+  Serial.print("[HTTP] begin...\n");
+  if (http.begin(client, "http://192.168.43.11/HSite/time.php")) {  // HTTP
+    Serial.print("[HTTP] GET...\n");
+    int httpCode = http.GET();
+    if (httpCode > 0) {
+      if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
+        String payload = http.getString();
+        Serial.println(payload);
+        return payload.toFloat();
       }
-      return http.getString().toFloat();
-      http.end();
-    } else {
-      Serial.printf("[HTTP} Unable to connect\n");
-      return 0;
     }
+    return http.getString().toFloat();
+    http.end();
+  } else {
+    Serial.printf("[HTTP} Unable to connect\n");
+    return 0;
+  }
 }
 
